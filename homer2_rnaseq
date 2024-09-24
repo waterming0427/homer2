@@ -1,0 +1,53 @@
+#homer2 rnaseq
+#save a list of genes as the .xlsx
+#!/bin/bash
+#SBATCH -A pccr           # Allocation name 
+#SBATCH -t 1:00:00        # Time limit
+#SBATCH -N 1              # Number of nodes
+#SBATCH -n 8              # Number of cores
+#SBATCH --job-name=homer2 # Job name
+#SBATCH --mail-type=FAIL,BEGIN,END
+#SBATCH --error=homer2-%J.err
+#SBATCH --output=homer2-%J.out
+
+# Load necessary modules
+module --force purge
+module load biocontainers/default
+module load homer2/5.1
+module load csvkit   # Ensure csvkit is available for in2csv
+
+# Define directories
+input_dir='/depot/edykhui/data/ming/RNA+ATAC_homer'
+output_dir='./homer_output'
+txt_dir="${input_dir}/txt_files"
+
+# Create directories if they don't exist
+mkdir -p "$txt_dir"
+mkdir -p "$output_dir"
+
+# List of Excel files to convert and process
+files=(
+    "atac+rna_pb1down.xlsx"
+    "atac+rna_pb1vhldown.xlsx"
+    "atac+rna_vhldown.xlsx"
+    "atac+rna_pb1up.xlsx"
+    "atac+rna_pb1vhlup.xlsx"
+    "atac+rna_vhlup.xlsx"
+)
+
+# Convert .xlsx files to .txt using in2csv and awk
+for file in "${files[@]}"; do
+    # Convert Excel to CSV and then extract the first column (gene symbols)
+    in2csv "${input_dir}/${file}" | awk -F, 'NR>1 {print $1}' > "${txt_dir}/$(basename "$file" .xlsx).txt"
+done
+
+# Run HOMER2 motif finding for each converted file
+for file in "${txt_dir}"/*.txt; do
+    # Define output directory for each run
+    base_name=$(basename "$file" .txt)
+    output_subdir="${output_dir}/${base_name}"
+    mkdir -p "$output_subdir"
+
+    # Run HOMER2 with specified parameters
+    findMotifs.pl "$file" human "$output_subdir" -start -500 -end 100 -p 8
+done
